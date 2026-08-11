@@ -1,0 +1,30 @@
+name: Go Build & Test CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Run Unit Tests
+        run: go test -v ./...
+
+      - name: Build Binary
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/frugal-llm ./cmd/proxy-server/main.go

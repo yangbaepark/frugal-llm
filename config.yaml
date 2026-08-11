@@ -1,0 +1,167 @@
+# ==============================================================================
+# Frugal LLM Default Configuration & Setup Guide
+# ==============================================================================
+#
+# QUICK START FOR BASIC USERS (ZERO-EDIT CONFIGURATION):
+# You do NOT need to modify this file! Frugal LLM automatically enables any
+# provider instance when its corresponding environment variable is exported:
+#
+#   Cloud Providers (Activated when API key is exported):
+#     export FRUGAL_LLM_OPENAI_API_KEY="sk-..."
+#     export FRUGAL_LLM_ANTHROPIC_API_KEY="sk-ant-..."
+#     export FRUGAL_LLM_GEMINI_API_KEY="AIzaSy..."
+#     export FRUGAL_LLM_DEEPSEEK_API_KEY="sk-..."
+#     export FRUGAL_LLM_GROQ_API_KEY="gsk_..."
+#     export FRUGAL_LLM_TOGETHER_API_KEY="..."
+#
+#   Local LLM Server (Activated when base URL is exported):
+#     export FRUGAL_LLM_LOCAL_BASE_URL="http://localhost:1234/v1"   # e.g., LM Studio, llama.cpp, vLLM
+#     export FRUGAL_LLM_LOCAL_BASE_URL="http://localhost:11434/v1"  # e.g., Ollama
+#
+# FOR ADVANCED USERS (CUSTOM CONFIGURATION):
+# To customize endpoints, model definitions, retry caps, or prompt templates:
+#   1. Copy this file: `cp config.yaml my_custom_config.yaml`
+#   2. Edit model use-case descriptions, cost factors ($0, $, $$, $$$$), or endpoints.
+#   3. Run Frugal LLM with your custom configuration:
+#      export FRUGAL_LLM_CONFIG="my_custom_config.yaml"
+#      ./frugal-llm
+# ==============================================================================
+
+server:
+  port: "8080"
+  log_level: "debug" # Options: "debug", "info", "warn", "error"
+  api_key: "" # Optional bearer key required to access the proxy
+
+providers:
+  # 1. Primary OpenAI Account
+  - name: "openai"
+    type: "openai"
+    base_url: "https://api.openai.com/v1"
+    api_key: "${FRUGAL_LLM_OPENAI_API_KEY}"
+    timeout_ms: 10000
+    max_retries: 2
+    max_timeout_ms: 30000
+    models:
+      - name: "gpt-5.6-sol"
+        cost_factor: "$$$$"
+        description: "Frontier precision model, best for formal legal analysis, statutory law, compliance, and contract review."
+      - name: "gpt-5.6-terra"
+        cost_factor: "$"
+        description: "Ultra-fast flash model, best for casual conversation, small talk, general Q&A, and quick text formatting."
+      - name: "gpt-4o"
+        cost_factor: "$$"
+        description: "Flagship multimodal model, balanced across high-speed reasoning, vision, and general coding."
+
+  # 2. Secondary / Work OpenAI Account
+  - name: "work-openai"
+    type: "openai"
+    base_url: "https://api.openai.com/v1"
+    api_key: "${FRUGAL_LLM_WORK_OPENAI_API_KEY}"
+    models:
+      - name: "gpt-4o"
+        cost_factor: "$$"
+        description: "Enterprise OpenAI instance flagship model."
+
+  # 3. DeepSeek (OpenAI-compatible protocol)
+  - name: "deepseek"
+    type: "openai"
+    base_url: "https://api.deepseek.com/v1"
+    api_key: "${FRUGAL_LLM_DEEPSEEK_API_KEY}"
+    models:
+      - name: "deepseek-v4-flash"
+        cost_factor: "$"
+        description: "Fast MoE model, best for rapid code completions, routine scripting, and general assistant tasks."
+      - name: "deepseek-v4-pro"
+        cost_factor: "$$$"
+        description: "High-capability frontier reasoning model, best for deep code synthesis and complex technical architecture analysis."
+      - name: "deepseek-r1"
+        cost_factor: "$$"
+        description: "Reasoning-tuned MoE model, best for math, logic puzzles, and algorithmic problem solving."
+
+  # 4. Groq Cloud (OpenAI-compatible protocol)
+  - name: "groq"
+    type: "openai"
+    base_url: "https://api.groq.com/openai/v1"
+    api_key: "${FRUGAL_LLM_GROQ_API_KEY}"
+    models:
+      - name: "llama-3.3-70b-versatile"
+        cost_factor: "$"
+        description: "LPU-accelerated high-speed model for general conversation and rapid queries."
+      - name: "mixtral-8x7b-32768"
+        cost_factor: "$"
+        description: "Ultra-fast LPU MoE model for long-context requests."
+
+  # 5. Together AI (OpenAI-compatible protocol)
+  - name: "together"
+    type: "openai"
+    base_url: "https://api.together.xyz/v1"
+    api_key: "${FRUGAL_LLM_TOGETHER_API_KEY}"
+    models:
+      - name: "meta-llama/Llama-3-70b-chat-hf"
+        cost_factor: "$"
+        description: "Hosted open-weights model for general chat and completion."
+
+  # 6. Anthropic Claude
+  - name: "anthropic"
+    type: "anthropic"
+    base_url: "https://api.anthropic.com/v1"
+    api_key: "${FRUGAL_LLM_ANTHROPIC_API_KEY}"
+    models:
+      - name: "claude-fable-5"
+        cost_factor: "$$$$"
+        description: "Frontier flagship model, best for massive, complex research, complicated architecture design, and deep system refactoring."
+      - name: "claude-opus-5"
+        cost_factor: "$$$"
+        description: "Deep reasoning model, best for math, formal logic, concurrency debugging, kernel programming, and complex algorithms."
+      - name: "claude-sonnet-5"
+        cost_factor: "$$"
+        description: "Flagship coding and reasoning model, best for software development, agentic coding workflows, refactoring, and general logic."
+      - name: "claude-haiku-5"
+        cost_factor: "$"
+        description: "High-speed model, best for rapid queries, text cleanup, lightweight summaries, and high-throughput tasks."
+
+  # 7. Generic Local LLM Provider (LM Studio, Ollama, llama.cpp, vLLM, Jan.ai, LocalAI)
+  # Enabled by setting FRUGAL_LLM_LOCAL_BASE_URL (e.g. "http://localhost:1234/v1" for LM Studio, "http://localhost:11434/v1" for Ollama)
+  - name: "local"
+    type: "openai"
+    base_url: "${FRUGAL_LLM_LOCAL_BASE_URL}"
+    api_key: "${FRUGAL_LLM_LOCAL_API_KEY}"
+    models:
+      - name: "local-model"
+        cost_factor: "$0"
+        description: "Locally hosted open-weights model (e.g. via LM Studio, Ollama, llama.cpp, vLLM), best for offline tasks and zero-cost prompt classification."
+
+  # 8. Google Gemini (OpenAI-compatible protocol)
+  - name: "gemini"
+    type: "openai"
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+    api_key: "${FRUGAL_LLM_GEMINI_API_KEY}"
+    models:
+      - name: "gemini-3.1-pro"
+        cost_factor: "$$"
+        description: "Reasoning and MoE model, best for complex mathematical problem solving, calculus, statistics, and scientific calculations."
+      - name: "gemini-3.1-flash"
+        cost_factor: "$"
+        description: "High-speed multimodal flash model, best for long-document context summarization and rapid queries."
+
+# Dynamic Provider & Model Selection Layer
+dynamic_routing:
+  trigger_mode: "always" # Options: "always", "alias_only", "alias_or_unprefixed"
+  auto_aliases:
+    - "auto"
+    - "frugal-router"
+  fallback_provider: "local"
+  fallback_model: "local-model"
+
+  # Prioritized Classifier Pipeline
+  # Classifiers are evaluated in order. The first classifier that successfully matches/routes the prompt determines the target.
+  classifiers:
+    - name: "llm-classifier"
+      type: "llm"
+      provider: "local"
+      model: "local-model"
+      temperature: 0.0
+      max_tokens: 300
+      timeout_ms: 60000
+      max_prompt_chars: 2000
+      prompt_template_path: "templates/classifier_prompt.tmpl"

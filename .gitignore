@@ -1,0 +1,36 @@
+# Binaries for SDKs and apps
+bin/
+*.exe
+*.exe;
+*.dll
+*.so
+*.dylib
+
+# Output of Go builds
+frugal-llm
+
+# Test binary built by `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Environment variables & local secrets
+.env
+.env.*
+!.env.example
+
+# IDEs, OS, and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
