@@ -43,17 +43,11 @@ func NewRouter(cfg *config.Config) *Router {
 
 	// 1. Instantiates adapters for all configured provider instances
 	for pName, pConfig := range cfg.Providers {
-		switch strings.ToLower(pConfig.Type) {
-		case "anthropic":
-			r.adapters[pName] = adapter.NewAnthropicAdapter(pConfig.BaseURL, pConfig.APIKey)
-		case "ollama":
-			r.adapters[pName] = adapter.NewOllamaAdapter(pConfig.BaseURL)
-		case "huggingface":
-			r.adapters[pName] = adapter.NewHuggingFaceAdapter(pConfig.BaseURL, pConfig.APIKey)
-		default: // "openai" or any OpenAI-compatible provider
-			r.adapters[pName] = adapter.NewOpenAIAdapter(pConfig.BaseURL, pConfig.APIKey)
+		ad, active := adapter.CreateAdapter(pName, pConfig.Type, pConfig.BaseURL, pConfig.APIKey)
+		if active {
+			r.adapters[pName] = ad
+			logger.Infof("[Proxy] Registered provider instance '%s' (Type: %s, Endpoint: %s)", pName, pConfig.Type, pConfig.BaseURL)
 		}
-		logger.Infof("[Proxy] Registered provider instance '%s' (Type: %s, Endpoint: %s)", pName, pConfig.Type, pConfig.BaseURL)
 	}
 
 	// 2. Initialize Dynamic Selector layer

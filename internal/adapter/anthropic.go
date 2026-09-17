@@ -18,11 +18,20 @@ type AnthropicAdapter struct {
 	APIKey  string
 }
 
-func NewAnthropicAdapter(baseURL, apiKey string) *AnthropicAdapter {
-	return &AnthropicAdapter{
-		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		APIKey:  strings.TrimSpace(apiKey),
+func NewAnthropicAdapter(baseURL, apiKey string) (*AnthropicAdapter, bool) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	apiKey = strings.TrimSpace(apiKey)
+	if baseURL == "" {
+		return nil, false
 	}
+	isLocal := strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1")
+	if !isLocal && apiKey == "" {
+		return nil, false
+	}
+	return &AnthropicAdapter{
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+	}, true
 }
 
 func (a *AnthropicAdapter) Name() string {

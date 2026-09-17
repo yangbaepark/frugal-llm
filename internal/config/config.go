@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"frugal-llm/internal/adapter"
 	"frugal-llm/internal/logger"
 
 	"gopkg.in/yaml.v3"
@@ -214,16 +215,9 @@ func loadYAMLConfig(path string) (*Config, error) {
 
 		cfg.DefinedProviders[pName] = true
 
-		// Provider is skipped if base_url is empty (e.g. FRUGAL_LLM_LOCAL_BASE_URL is not set)
-		if baseURL == "" {
-			logger.Debugf("Provider instance '%s' skipped (no base_url configured)", pName)
-			continue
-		}
-
-		// Remote providers require a non-empty API key
-		isLocal := pName == "local" || strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1")
-		if !isLocal && apiKey == "" {
-			logger.Debugf("Provider instance '%s' skipped (no API key configured)", pName)
+		// Check activation via provider adapter implementation
+		if !adapter.IsActive(p.Name, p.Type, p.BaseURL, p.APIKey) {
+			logger.Debugf("Provider instance '%s' skipped (inactive / missing credentials)", pName)
 			continue
 		}
 

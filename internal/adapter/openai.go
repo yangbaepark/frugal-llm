@@ -17,11 +17,20 @@ type OpenAIAdapter struct {
 	APIKey  string
 }
 
-func NewOpenAIAdapter(baseURL, apiKey string) *OpenAIAdapter {
-	return &OpenAIAdapter{
-		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		APIKey:  strings.TrimSpace(apiKey),
+func NewOpenAIAdapter(name, baseURL, apiKey string) (*OpenAIAdapter, bool) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	apiKey = strings.TrimSpace(apiKey)
+	if baseURL == "" {
+		return nil, false
 	}
+	isLocal := strings.ToLower(name) == "local" || strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1")
+	if !isLocal && apiKey == "" {
+		return nil, false
+	}
+	return &OpenAIAdapter{
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+	}, true
 }
 
 func (a *OpenAIAdapter) Name() string {

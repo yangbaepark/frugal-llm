@@ -17,10 +17,14 @@ type OllamaAdapter struct {
 	BaseURL string
 }
 
-func NewOllamaAdapter(baseURL string) *OllamaAdapter {
-	return &OllamaAdapter{
-		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
+func NewOllamaAdapter(baseURL string) (*OllamaAdapter, bool) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return nil, false
 	}
+	return &OllamaAdapter{
+		BaseURL: baseURL,
+	}, true
 }
 
 func (a *OllamaAdapter) Name() string {

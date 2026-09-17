@@ -17,11 +17,20 @@ type HuggingFaceAdapter struct {
 	APIKey  string
 }
 
-func NewHuggingFaceAdapter(baseURL, apiKey string) *HuggingFaceAdapter {
-	return &HuggingFaceAdapter{
-		BaseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
-		APIKey:  strings.TrimSpace(apiKey),
+func NewHuggingFaceAdapter(baseURL, apiKey string) (*HuggingFaceAdapter, bool) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	apiKey = strings.TrimSpace(apiKey)
+	if baseURL == "" {
+		return nil, false
 	}
+	isLocal := strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1")
+	if !isLocal && apiKey == "" {
+		return nil, false
+	}
+	return &HuggingFaceAdapter{
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+	}, true
 }
 
 func (a *HuggingFaceAdapter) Name() string {
