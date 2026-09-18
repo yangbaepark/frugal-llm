@@ -42,15 +42,18 @@ providers:
     max_retries: 2
     max_timeout_ms: 30000
     models:
-      - name: "gpt-5.6-sol"
+      - name: "gpt-6-astra"
         cost_factor: "$$$$"
-        description: "Frontier precision model, best for formal legal analysis, statutory law, compliance, and contract review."
+        description: "Frontier flagship reasoning model, best for autonomous agent orchestration, deep scientific discovery, formal logic, and complex system design."
+      - name: "gpt-5.6-sol"
+        cost_factor: "$$$"
+        description: "Frontier precision model, best for statutory law, compliance, formal verification, and contract analysis."
       - name: "gpt-5.6-terra"
-        cost_factor: "$"
-        description: "Ultra-fast flash model, best for casual conversation, small talk, general Q&A, and quick text formatting."
+        cost_factor: "$$"
+        description: "Balanced workhorse model, best for software engineering, workflow automation, and general coding."
       - name: "gpt-4o"
         cost_factor: "$$"
-        description: "Flagship multimodal model, balanced across high-speed reasoning, vision, and general coding."
+        description: "Flagship multimodal model, balanced across high-speed reasoning, vision, and general chat."
 
   # 2. Secondary / Work OpenAI Account
   - name: "work-openai"
@@ -87,9 +90,12 @@ providers:
       - name: "llama-3.3-70b-versatile"
         cost_factor: "$"
         description: "LPU-accelerated high-speed model for general conversation and rapid queries."
-      - name: "mixtral-8x7b-32768"
+      - name: "qwen/qwen3.8-27b"
+        cost_factor: "$$"
+        description: "LPU-accelerated high-precision dense model, best for coding, strict tool schemas, and technical logic."
+      - name: "llama-3.1-8b-instant"
         cost_factor: "$"
-        description: "Ultra-fast LPU MoE model for long-context requests."
+        description: "Ultra-low latency lightweight model for instant responses and simple text tasks."
 
   # 5. Together AI (OpenAI-compatible protocol)
   - name: "together"
@@ -97,9 +103,27 @@ providers:
     base_url: "https://api.together.xyz/v1"
     api_key: "${FRUGAL_LLM_TOGETHER_API_KEY}"
     models:
-      - name: "meta-llama/Llama-3-70b-chat-hf"
+      - name: "moonshotai/Kimi-K3"
+        cost_factor: "$$$"
+        description: "Ultra-long 1M context frontier model, best for deep multi-document retrieval, long-context research analysis, and intricate needle-in-a-haystack search."
+      - name: "Qwen/Qwen3.8-2.4T-A95B"
+        cost_factor: "$$$"
+        description: "Flagship 2.4T/A95B MoE foundation model, best for massive research synthesis, complex mathematical proofs, and deep architectural reasoning."
+      - name: "deepseek-ai/DeepSeek-V4-Pro-0813"
+        cost_factor: "$$"
+        description: "Frontier reasoning model, best for hard mathematical problem solving, algorithm design, and formal code verification."
+      - name: "THUDM/GLM-5.3"
+        cost_factor: "$$"
+        description: "Bilingual flagship reasoning model, best for deep document synthesis, enterprise knowledge workflows, and complex language understanding."
+      - name: "Muse-Glimmer-30B"
         cost_factor: "$"
-        description: "Hosted open-weights model for general chat and completion."
+        description: "Autonomous agent model with failure recovery, best for sequential tool execution, UI/screenshot parsing, and reliable tool-calling loops."
+      - name: "deepseek-ai/DeepSeek-V4.1-Flash"
+        cost_factor: "$"
+        description: "Ultra-fast lightweight MoE model, best for high-throughput code completions, quick debugging, and rapid text generation."
+      - name: "THUDM/GLM-5.3-Flash"
+        cost_factor: "$"
+        description: "High-speed lightweight flash model, best for rapid text summaries, instant conversational responses, and real-time extraction."
 
   # 6. Anthropic Claude
   - name: "anthropic"
@@ -139,10 +163,10 @@ providers:
     models:
       - name: "gemini-3.1-pro"
         cost_factor: "$$"
-        description: "Reasoning and MoE model, best for complex mathematical problem solving, calculus, statistics, and scientific calculations."
-      - name: "gemini-3.1-flash"
+        description: "Academic and deep reasoning model, best for formal mathematics, scientific problem solving, structured document analysis, and classical logic."
+      - name: "gemini-3.8-flash"
         cost_factor: "$"
-        description: "High-speed multimodal flash model, best for long-document context summarization and rapid queries."
+        description: "High-speed agentic workhorse, best for software engineering, agentic tool-calling pipelines, rapid codebase refactoring, and controllable-depth reasoning."
 
 # Dynamic Provider & Model Selection Layer
 dynamic_routing:
