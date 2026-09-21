@@ -3,6 +3,8 @@ package selector
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -218,5 +220,218 @@ func TestExtractPromptMultiMessageOverLimitLargeInitial(t *testing.T) {
 	}
 	if !strings.Contains(extracted, "... [truncated]") {
 		t.Errorf("Expected initial prompt to be truncated, got: %s", extracted)
+	}
+}
+
+func TestSystemOneClassifierSuccess(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/systemone" && r.URL.Path != "/systemone" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"model": "jev-latest",
+			"answers": {
+				"route": {
+					"type": "choice",
+					"choice": "openai/gpt-5.6-sol",
+					"confidence": 0.92,
+					"probabilities": {
+						"openai/gpt-5.6-sol": 0.92,
+						"openai/gpt-5.6-terra": 0.08
+					}
+				}
+			},
+			"latency_ms": 45
+		}`))
+	}))
+	defer ts.Close()
+
+	cfg := config.DynamicRoutingConfig{
+		FallbackProvider: "anthropic",
+		FallbackModel:    "claude-sonnet-5",
+		Classifiers: []config.ClassifierConfig{
+			{
+				Name: "system-one-classifier",
+				Type: "system-one",
+				SystemOne: config.SystemOneClassifierConfig{
+					BaseURL:             ts.URL + "/v1",
+					Model:               "jev-latest",
+					ConfidenceThreshold: 0.8,
+					TimeoutMS:           1000,
+				},
+			},
+		},
+	}
+
+	sel := NewDynamicSelector(cfg, testProviders(), nil)
+
+	req := &model.ChatCompletionRequest{
+		Messages: []model.ChatMessage{{Role: "user", Content: "Draft a strict non-disclosure agreement."}},
+	}
+
+	gotModel, reason := sel.SelectModel(context.Background(), req)
+	if gotModel != "openai/gpt-5.6-sol" {
+		t.Errorf("Expected System One classifier to route to 'openai/gpt-5.6-sol', got %v", gotModel)
+	}
+	if reason != "System One Classifier: openai/gpt-5.6-sol" {
+		t.Errorf("Expected reason 'System One Classifier: openai/gpt-5.6-sol', got %v", reason)
+	}
+}
+
+func TestSystemOneClassifierConfidenceFallbackToLLM(t *testing.T) {
+	// System One returns low confidence (0.45 < 0.8 threshold) -> Should fall back to 2nd classifier (LLM)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"model": "jev-latest",
+			"answers": {
+				"route": {
+					"type": "choice",
+					"choice": "openai/gpt-5.6-terra",
+					"confidence": 0.45,
+					"probabilities": {
+						"openai/gpt-5.6-terra": 0.45,
+						"openai/gpt-5.6-sol": 0.55
+					}
+				}
+			}
+		}`))
+	}))
+	defer ts.Close()
+
+	cfg := config.DynamicRoutingConfig{
+		FallbackProvider: "anthropic",
+		FallbackModel:    "claude-sonnet-5",
+		Classifiers: []config.ClassifierConfig{
+			{
+				Name: "fast-system-one",
+				Type: "system-one",
+				SystemOne: config.SystemOneClassifierConfig{
+					BaseURL:             ts.URL,
+					Model:               "jev-latest",
+					ConfidenceThreshold: 0.8, // 0.45 is below this
+				},
+			},
+			{
+				Name: "secondary-llm",
+				Type: "llm",
+				LLM: config.LLMClassifierConfig{
+					Provider:           "anthropic",
+					Model:              "claude-sonnet-5",
+					PromptTemplatePath: "../../templates/classifier_prompt.tmpl",
+				},
+			},
+		},
+	}
+
+	exec := &mockExecutor{response: "anthropic/claude-sonnet-5"}
+	sel := NewDynamicSelector(cfg, testProviders(), exec)
+
+	req := &model.ChatCompletionRequest{
+		Messages: []model.ChatMessage{{Role: "user", Content: "Complex prompt with ambiguous domain."}},
+	}
+
+	gotModel, reason := sel.SelectModel(context.Background(), req)
+	if gotModel != "anthropic/claude-sonnet-5" {
+		t.Errorf("Expected fallback to LLM classifier 'anthropic/claude-sonnet-5', got %v", gotModel)
+	}
+	if reason != "LLM Classifier: anthropic/claude-sonnet-5" {
+		t.Errorf("Expected reason 'LLM Classifier: anthropic/claude-sonnet-5', got %v", reason)
+	}
+}
+
+func TestSystemOneClassifierServerErrorFallbackToLLM(t *testing.T) {
+	// System One endpoint fails with 500 error -> Fall back to LLM classifier
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	cfg := config.DynamicRoutingConfig{
+		FallbackProvider: "anthropic",
+		FallbackModel:    "claude-sonnet-5",
+		Classifiers: []config.ClassifierConfig{
+			{
+				Name: "system-one-classifier",
+				Type: "system-one",
+				SystemOne: config.SystemOneClassifierConfig{
+					BaseURL:   ts.URL,
+					TimeoutMS: 500,
+				},
+			},
+			{
+				Name: "backup-llm",
+				Type: "llm",
+				LLM: config.LLMClassifierConfig{
+					Provider:           "openai",
+					Model:              "gpt-5.6-sol",
+					PromptTemplatePath: "../../templates/classifier_prompt.tmpl",
+				},
+			},
+		},
+	}
+
+	exec := &mockExecutor{response: "openai/gpt-5.6-sol"}
+	sel := NewDynamicSelector(cfg, testProviders(), exec)
+
+	req := &model.ChatCompletionRequest{
+		Messages: []model.ChatMessage{{Role: "user", Content: "Corporate merger clause audit."}},
+	}
+
+	gotModel, reason := sel.SelectModel(context.Background(), req)
+	if gotModel != "openai/gpt-5.6-sol" {
+		t.Errorf("Expected fallback to LLM classifier 'openai/gpt-5.6-sol', got %v", gotModel)
+	}
+	if reason != "LLM Classifier: openai/gpt-5.6-sol" {
+		t.Errorf("Expected reason 'LLM Classifier: openai/gpt-5.6-sol', got %v", reason)
+	}
+}
+
+func TestSystemOneClassifierAllFailFallbackToDefault(t *testing.T) {
+	// Both System One and LLM fail -> Fall back to default fallback model
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server down", http.StatusBadGateway)
+	}))
+	defer ts.Close()
+
+	cfg := config.DynamicRoutingConfig{
+		FallbackProvider: "anthropic",
+		FallbackModel:    "claude-sonnet-5",
+		Classifiers: []config.ClassifierConfig{
+			{
+				Name: "system-one-classifier",
+				Type: "system-one",
+				SystemOne: config.SystemOneClassifierConfig{
+					BaseURL:   ts.URL,
+					TimeoutMS: 500,
+				},
+			},
+			{
+				Name: "backup-llm",
+				Type: "llm",
+				LLM: config.LLMClassifierConfig{
+					Provider:           "openai",
+					Model:              "gpt-5.6-sol",
+					PromptTemplatePath: "../../templates/classifier_prompt.tmpl",
+				},
+			},
+		},
+	}
+
+	exec := &mockExecutor{err: fmt.Errorf("LLM timeout")}
+	sel := NewDynamicSelector(cfg, testProviders(), exec)
+
+	req := &model.ChatCompletionRequest{
+		Messages: []model.ChatMessage{{Role: "user", Content: "Generic prompt."}},
+	}
+
+	gotModel, reason := sel.SelectModel(context.Background(), req)
+	if gotModel != "anthropic/claude-sonnet-5" {
+		t.Errorf("Expected ultimate fallback 'anthropic/claude-sonnet-5', got %v", gotModel)
+	}
+	if reason != "Fallback Model" {
+		t.Errorf("Expected reason 'Fallback Model', got %v", reason)
 	}
 }

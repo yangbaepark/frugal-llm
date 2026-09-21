@@ -24,13 +24,40 @@ type LLMClassifierConfig struct {
 	PromptTemplatePath string   `yaml:"prompt_template_path,omitempty"`
 }
 
+// SystemOneClassifierConfig configures parameters specific to System One / Jev / Kev decision engines.
+type SystemOneClassifierConfig struct {
+	BaseURL             string  `yaml:"base_url,omitempty"`             // e.g. "https://api.typesafe.ai/v1" or "http://localhost:8009/v1"
+	Endpoint            string  `yaml:"endpoint,omitempty"`             // Alias for base_url
+	APIKey              string  `yaml:"api_key,omitempty"`              // Optional API key / Bearer token
+	Model               string  `yaml:"model,omitempty"`                // e.g. "jev-latest", "kev-latest", "kev-4b", "open-jev-9b"
+	TimeoutMS           int     `yaml:"timeout_ms,omitempty"`           // Timeout in milliseconds (default: 3000ms)
+	MaxPromptChars      int     `yaml:"max_prompt_chars,omitempty"`     // Max chars to extract from prompt (default: 4000)
+	ConfidenceThreshold float64 `yaml:"confidence_threshold,omitempty"` // Minimum confidence (0.0 to 1.0) required to accept decision; otherwise fall back
+	Instructions        string  `yaml:"instructions,omitempty"`         // Custom instructions for the choice routing question
+}
+
 // ClassifierConfig represents a generic classifier entry embedding common metadata and type-specific configurations.
 type ClassifierConfig struct {
-	Name string `yaml:"name"` // Generic metadata: "llm-classifier", "regex-classifier"
-	Type string `yaml:"type"` // Generic metadata: "llm", "regex"
+	Name string `yaml:"name"` // Generic metadata: "system-one-classifier", "llm-classifier", "regex-classifier"
+	Type string `yaml:"type"` // Generic metadata: "system-one", "llm", "regex"
 
-	// LLM-specific parameters (inlined from YAML)
-	LLM LLMClassifierConfig `yaml:",inline"`
+	// Shared / inlined YAML fields
+	Provider            string   `yaml:"provider,omitempty"`
+	Model               string   `yaml:"model,omitempty"`
+	TimeoutMS           int      `yaml:"timeout_ms,omitempty"`
+	MaxPromptChars      int      `yaml:"max_prompt_chars,omitempty"`
+	Temperature         *float64 `yaml:"temperature,omitempty"`
+	MaxTokens           int      `yaml:"max_tokens,omitempty"`
+	PromptTemplatePath  string   `yaml:"prompt_template_path,omitempty"`
+	BaseURL             string   `yaml:"base_url,omitempty"`
+	Endpoint            string   `yaml:"endpoint,omitempty"`
+	APIKey              string   `yaml:"api_key,omitempty"`
+	ConfidenceThreshold float64  `yaml:"confidence_threshold,omitempty"`
+	Instructions        string   `yaml:"instructions,omitempty"`
+
+	// Populated typed sub-configs for router execution
+	LLM       LLMClassifierConfig       `yaml:"-"`
+	SystemOne SystemOneClassifierConfig `yaml:"-"`
 }
 
 // DynamicRoutingConfig holds settings for dynamic provider/model selection and prioritized classifiers pipeline.
@@ -171,31 +198,7 @@ func loadYAMLConfig(path string) (*Config, error) {
 	}
 
 	for i := range cfg.DynamicRouting.Classifiers {
-		cl := &cfg.DynamicRouting.Classifiers[i]
-		if cl.Type == "" {
-			cl.Type = "llm"
-		}
-		if cl.Name == "" {
-			cl.Name = cl.Type + "-classifier"
-		}
-		if strings.ToLower(cl.Type) == "llm" {
-			if cl.LLM.TimeoutMS <= 0 {
-				cl.LLM.TimeoutMS = 60000
-			}
-			if cl.LLM.MaxPromptChars <= 0 {
-				cl.LLM.MaxPromptChars = 2000
-			}
-			if cl.LLM.MaxTokens <= 0 {
-				cl.LLM.MaxTokens = 300
-			}
-			if cl.LLM.Temperature == nil {
-				zeroTemp := 0.0
-				cl.LLM.Temperature = &zeroTemp
-			}
-			if cl.LLM.PromptTemplatePath == "" {
-				cl.LLM.PromptTemplatePath = "templates/classifier_prompt.tmpl"
-			}
-		}
+		cfg.DynamicRouting.Classifiers[i].sync()
 	}
 
 	for _, p := range raw.Providers {
@@ -227,6 +230,100 @@ func loadYAMLConfig(path string) (*Config, error) {
 	return cfg, nil
 }
 
+func (cl *ClassifierConfig) sync() {
+	if cl.Type == "" {
+		cl.Type = "llm"
+	}
+	if cl.Name == "" {
+		cl.Name = cl.Type + "-classifier"
+	}
+	if strings.ToLower(cl.Type) == "system-one" {
+		if cl.SystemOne.BaseURL == "" {
+			cl.SystemOne.BaseURL = cl.BaseURL
+		}
+		if cl.SystemOne.BaseURL == "" {
+			cl.SystemOne.BaseURL = cl.Endpoint
+		}
+		if cl.SystemOne.BaseURL == "" {
+			cl.SystemOne.BaseURL = cl.SystemOne.Endpoint
+		}
+		if cl.SystemOne.BaseURL == "" {
+			cl.SystemOne.BaseURL = "https://api.typesafe.ai/v1"
+		}
+		cl.SystemOne.BaseURL = strings.TrimRight(strings.TrimSpace(cl.SystemOne.BaseURL), "/")
+
+		if cl.SystemOne.Model == "" {
+			cl.SystemOne.Model = cl.Model
+		}
+		if cl.SystemOne.Model == "" {
+			cl.SystemOne.Model = "jev-latest"
+		}
+		if cl.SystemOne.TimeoutMS <= 0 {
+			cl.SystemOne.TimeoutMS = cl.TimeoutMS
+		}
+		if cl.SystemOne.TimeoutMS <= 0 {
+			cl.SystemOne.TimeoutMS = 3000
+		}
+		if cl.SystemOne.MaxPromptChars <= 0 {
+			cl.SystemOne.MaxPromptChars = cl.MaxPromptChars
+		}
+		if cl.SystemOne.MaxPromptChars <= 0 {
+			cl.SystemOne.MaxPromptChars = 4000
+		}
+		if cl.SystemOne.ConfidenceThreshold == 0 && cl.ConfidenceThreshold > 0 {
+			cl.SystemOne.ConfidenceThreshold = cl.ConfidenceThreshold
+		}
+		if cl.SystemOne.Instructions == "" {
+			cl.SystemOne.Instructions = cl.Instructions
+		}
+		if cl.SystemOne.Instructions == "" {
+			cl.SystemOne.Instructions = "Select the most cost-effective and capable LLM model to fulfill this request."
+		}
+		if cl.SystemOne.APIKey == "" {
+			cl.SystemOne.APIKey = cl.APIKey
+		}
+	}
+	if strings.ToLower(cl.Type) == "llm" {
+		if cl.LLM.Provider == "" {
+			cl.LLM.Provider = cl.Provider
+		}
+		if cl.LLM.Model == "" {
+			cl.LLM.Model = cl.Model
+		}
+		if cl.LLM.TimeoutMS <= 0 {
+			cl.LLM.TimeoutMS = cl.TimeoutMS
+		}
+		if cl.LLM.TimeoutMS <= 0 {
+			cl.LLM.TimeoutMS = 60000
+		}
+		if cl.LLM.MaxPromptChars <= 0 {
+			cl.LLM.MaxPromptChars = cl.MaxPromptChars
+		}
+		if cl.LLM.MaxPromptChars <= 0 {
+			cl.LLM.MaxPromptChars = 2000
+		}
+		if cl.LLM.MaxTokens <= 0 {
+			cl.LLM.MaxTokens = cl.MaxTokens
+		}
+		if cl.LLM.MaxTokens <= 0 {
+			cl.LLM.MaxTokens = 300
+		}
+		if cl.LLM.Temperature == nil {
+			cl.LLM.Temperature = cl.Temperature
+		}
+		if cl.LLM.Temperature == nil {
+			zeroTemp := 0.0
+			cl.LLM.Temperature = &zeroTemp
+		}
+		if cl.LLM.PromptTemplatePath == "" {
+			cl.LLM.PromptTemplatePath = cl.PromptTemplatePath
+		}
+		if cl.LLM.PromptTemplatePath == "" {
+			cl.LLM.PromptTemplatePath = "templates/classifier_prompt.tmpl"
+		}
+	}
+}
+
 // Validate ensures that required provider and LLM classifier configurations exist and are valid.
 func (c *Config) Validate() error {
 	modelsCount := 0
@@ -254,6 +351,19 @@ func (c *Config) Validate() error {
 
 	for i := range c.DynamicRouting.Classifiers {
 		cl := &c.DynamicRouting.Classifiers[i]
+		cl.sync()
+		if strings.ToLower(cl.Type) == "system-one" {
+			baseURL := strings.TrimSpace(cl.SystemOne.BaseURL)
+			if baseURL == "" {
+				baseURL = strings.TrimSpace(cl.SystemOne.Endpoint)
+			}
+			if baseURL == "" {
+				return fmt.Errorf("configuration error: classifier '%s' requires 'base_url' field", cl.Name)
+			}
+			if cl.SystemOne.ConfidenceThreshold < 0.0 || cl.SystemOne.ConfidenceThreshold > 1.0 {
+				return fmt.Errorf("configuration error: classifier '%s' confidence_threshold must be between 0.0 and 1.0", cl.Name)
+			}
+		}
 		if strings.ToLower(cl.Type) == "llm" {
 			if strings.TrimSpace(cl.LLM.Provider) == "" {
 				return fmt.Errorf("configuration error: classifier '%s' requires 'provider' field", cl.Name)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"text/template"
@@ -53,7 +54,7 @@ type PromptData struct {
 	UserPrompt string
 }
 
-// DynamicSelector manages LLM-based classification for model selection.
+// DynamicSelector manages LLM-based and System One classification for model selection.
 type DynamicSelector struct {
 	cfg         config.DynamicRoutingConfig
 	providers   []ProviderGroup
@@ -61,6 +62,7 @@ type DynamicSelector struct {
 	aliasesMap  map[string]bool
 	executor    ClassificationExecutor
 	promptTmpl  *template.Template
+	httpClient  *http.Client
 }
 
 // NewDynamicSelector initializes dynamic routing rules and builds candidate provider model pools.
@@ -126,6 +128,9 @@ func NewDynamicSelector(cfg config.DynamicRoutingConfig, providerConfigs map[str
 		aliasesMap: aliasesMap,
 		executor:   exec,
 		promptTmpl: tmpl,
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
 	}
 }
 
@@ -154,6 +159,17 @@ func (s *DynamicSelector) SelectModel(ctx context.Context, req *model.ChatComple
 
 	for _, c := range s.cfg.Classifiers {
 		switch strings.ToLower(c.Type) {
+		case "system-one":
+			prompt := ExtractPrompt(req, c.SystemOne.MaxPromptChars)
+			if prompt == "" {
+				continue
+			}
+			targetModel, err := s.classifyWithSystemOne(ctx, c.SystemOne, prompt)
+			if err == nil && targetModel != "" {
+				return targetModel, fmt.Sprintf("System One Classifier: %s", targetModel)
+			}
+			logger.Warnf("System One classification via classifier '%s' failed or below confidence threshold (%v). Trying next pipeline option...", c.Name, err)
+
 		case "llm":
 			prompt := ExtractPrompt(req, c.LLM.MaxPromptChars)
 			if prompt == "" {

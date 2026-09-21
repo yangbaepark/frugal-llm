@@ -179,7 +179,18 @@ dynamic_routing:
 
   # Prioritized Classifier Pipeline
   # Classifiers are evaluated in order. The first classifier that successfully matches/routes the prompt determines the target.
+  # If a classifier fails, times out, or falls below confidence_threshold, the pipeline seamlessly proceeds to the next classifier in sequence.
   classifiers:
+    # Example: Ultra-fast System One Decision Engine (~50-100ms latency, calibrated probabilities)
+    # - name: "system-one-classifier"
+    #   type: "system-one"
+    #   base_url: "https://api.typesafe.ai/v1" # or "http://localhost:8009/v1" for local Kev/Open-Jev server
+    #   api_key: "${FRUGAL_LLM_TYPESAFE_API_KEY}"
+    #   model: "jev-latest"                    # Options: "jev-latest", "kev-latest", "kev-4b", "open-jev-9b"
+    #   confidence_threshold: 0.70             # Min confidence (0.0-1.0) to accept choice; otherwise falls back to next classifier
+    #   timeout_ms: 3000
+    #   max_prompt_chars: 4000
+
     - name: "llm-classifier"
       type: "llm"
       provider: "local"
