@@ -160,6 +160,10 @@ func (s *DynamicSelector) SelectModel(ctx context.Context, req *model.ChatComple
 	for _, c := range s.cfg.Classifiers {
 		switch strings.ToLower(c.Type) {
 		case "system-one":
+			if !c.SystemOne.IsActive() {
+				logger.Debugf("[Classifier] Skipping System One classifier '%s' (inactive: missing API key for remote endpoint '%s')", c.Name, c.SystemOne.BaseURL)
+				continue
+			}
 			prompt := ExtractPrompt(req, c.SystemOne.MaxPromptChars)
 			if prompt == "" {
 				continue

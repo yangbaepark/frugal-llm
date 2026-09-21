@@ -36,6 +36,22 @@ type SystemOneClassifierConfig struct {
 	Instructions        string  `yaml:"instructions,omitempty"`         // Custom instructions for the choice routing question
 }
 
+// IsActive checks whether the System One classifier has required credentials/endpoints to be active.
+func (cfg SystemOneClassifierConfig) IsActive() bool {
+	baseURL := strings.TrimSpace(cfg.BaseURL)
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(cfg.Endpoint)
+	}
+	if baseURL == "" {
+		return false
+	}
+	isLocal := strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1") || strings.Contains(baseURL, "0.0.0.0")
+	if !isLocal && strings.TrimSpace(cfg.APIKey) == "" {
+		return false
+	}
+	return true
+}
+
 // ClassifierConfig represents a generic classifier entry embedding common metadata and type-specific configurations.
 type ClassifierConfig struct {
 	Name string `yaml:"name"` // Generic metadata: "system-one-classifier", "llm-classifier", "regex-classifier"
