@@ -39,7 +39,7 @@ Different tasks require distinct model capabilities, parameters, and architectur
 - **Direct Provider & Model Classification:** Exclusive prompt-based routing via a template-driven classifier engine using the cheapest possible model (e.g. local LM Studio/Ollama or ultra-low-cost Flash models). The classifier directly inspects active providers and their model use-case descriptions (`templates/classifier_prompt.tmpl`) to route prompts directly to target `provider/model` endpoints without manual category configuration.
 - **System One / Jev Decision Engine Support (Experimental):** Support for non-autoregressive, calibrated decision engines ([TypeSafe Jev](https://www.datacamp.com/blog/system-one-models-jev), [Kev](https://github.com/jaredpalmer/kev), [Open-Jev-9B](https://huggingface.co/ZefanCai/Open-Jev-9B)) for single-forward-pass prompt classification with ~50-100ms latency.
 - **Pluggable Prioritized Classifier Pipeline:** Sequentially chains fast decision engines (System One) with fallback LLM judges and default safety models, ensuring zero routing failures.
-- **Unified OpenAI Specification:** Zero code refactoring — compatible with standard OpenAI SDKs, LangChain, LlamaIndex, Cline, Cursor, or `curl`.
+- **Universal Agent & IDE Compatibility:** Zero code refactoring — works seamlessly with Claude Code, Hermes Agent, OpenClaw, Cursor, Cline, Aider, LangChain, or standard OpenAI SDKs.
 - **Flexible Payload Unmarshaling:** Native support for both string and structured array content parts sent by coding assistants (Cline, Cursor).
 - **Environment Variable Activation:** Remote providers activate when their API key is set; local servers activate when `FRUGAL_LLM_LOCAL_BASE_URL` is set.
 - **SSE Streaming Support:** Full real-time Server-Sent Events (SSE) streaming for all supported providers.
@@ -50,121 +50,92 @@ Different tasks require distinct model capabilities, parameters, and architectur
 
 ## Quick Start
 
-### 1. Basic Setup (Zero-Edit Configuration)
+The fastest way to run Frugal LLM is using the official multi-architecture Docker image (`linux/amd64`, `linux/arm64`) from **Docker Hub** or **GitHub Container Registry (GHCR)**.
 
-Basic users do **not need to edit any configuration files**. Simply export the environment variables for the LLM providers you want to use. Frugal LLM automatically activates providers matching your exported keys at startup:
+### 1. Run with Docker (Zero-Edit Setup)
 
-```bash
-# Cloud Provider API Keys (Exporting automatically enables the provider)
-export FRUGAL_LLM_OPENAI_API_KEY="sk-..."
-export FRUGAL_LLM_WORK_OPENAI_API_KEY="sk-..."
-export FRUGAL_LLM_ANTHROPIC_API_KEY="sk-ant-..."
-export FRUGAL_LLM_GEMINI_API_KEY="AIzaSy..."
-export FRUGAL_LLM_DEEPSEEK_API_KEY="sk-..."
-export FRUGAL_LLM_GROQ_API_KEY="gsk_..."
-export FRUGAL_LLM_TOGETHER_API_KEY="..."
-export FRUGAL_LLM_TYPESAFE_API_KEY="ts-..." # Optional: Enables ultra-fast System One / Jev routing (Experimental)
-
-# Local LLM Server Endpoint (LM Studio, Ollama, llama.cpp, vLLM, Jan.ai)
-# e.g., "http://localhost:1234/v1" for LM Studio, "http://localhost:11434/v1" for Ollama
-export FRUGAL_LLM_LOCAL_BASE_URL="http://localhost:1234/v1"
-```
-
-### 2. Advanced Setup (Custom YAML Configuration)
-
-Advanced users can copy the default `config.yaml` to customize endpoints, model lists, cost factors (`$0`, `$`, `$$`, `$$$`, `$$$$`), or retry limits:
+Simply pass your API keys directly to the container — Frugal LLM automatically enables any provider whose key is present:
 
 ```bash
-cp config.yaml my_custom_config.yaml
-export FRUGAL_LLM_CONFIG="my_custom_config.yaml"
+docker run -d --name frugal-llm \
+  -p 8080:8080 \
+  -e FRUGAL_LLM_OPENAI_API_KEY="sk-..." \
+  -e FRUGAL_LLM_ANTHROPIC_API_KEY="sk-ant-..." \
+  -e FRUGAL_LLM_GEMINI_API_KEY="AIzaSy..." \
+  -e FRUGAL_LLM_DEEPSEEK_API_KEY="sk-..." \
+  -e FRUGAL_LLM_GROQ_API_KEY="gsk_..." \
+  -e FRUGAL_LLM_TOGETHER_API_KEY="..." \
+  -e FRUGAL_LLM_TYPESAFE_API_KEY="ts-..." \
+  yangbaepark/frugal-llm:latest
 ```
 
-In `config.yaml`, providers resolve settings directly from environment variables:
+*(Or from GHCR: `ghcr.io/yangbaepark/frugal-llm:latest`)*
 
-```yaml
-providers:
-  - name: "openai"
-    type: "openai"
-    base_url: "https://api.openai.com/v1"
-    api_key: "${FRUGAL_LLM_OPENAI_API_KEY}"
-    models:
-      - name: "gpt-4o"
-        cost_factor: "$$"
-        description: "Flagship model balanced across reasoning, vision, and coding."
-
-  # Generic Local LLM Server (LM Studio, Ollama, llama.cpp, vLLM, Jan.ai)
-  - name: "local"
-    type: "openai"
-    base_url: "${FRUGAL_LLM_LOCAL_BASE_URL}"
-    api_key: "${FRUGAL_LLM_LOCAL_API_KEY}"
-    models:
-      - name: "local-model"
-        cost_factor: "$0"
-        description: "Locally hosted open-weights model for zero-cost routing & offline tasks."
-```
-
-### 3. Run the Server
+### 2. Or Pass an `.env` File
 
 ```bash
-go run cmd/proxy-server/main.go
-```
-
-Or build a compiled single binary:
-
-```bash
-go build -o frugal-llm cmd/proxy-server/main.go
-./frugal-llm
+docker run -d --name frugal-llm \
+  -p 8080:8080 \
+  --env-file .env \
+  yangbaepark/frugal-llm:latest
 ```
 
 ---
 
-## Usage Examples
+## Agent & Tool Integrations
 
-### 1. Auto-Selected Workload Routing Request
+Point your favorite AI coding assistant or autonomous agent to `http://localhost:8080/v1` and use `"model": "auto"` (or `"frugal-router"`). Frugal LLM transparently inspects each prompt and routes it to the optimal specialized model.
 
-Use `"model": "auto"` (or `"frugal-router"`) to let Frugal LLM auto-select the best specialized model for the workload:
+### 1. Claude Code (`claude-code`)
+
+Configure Anthropic's Claude Code CLI to route through Frugal LLM:
 
 ```bash
-# Automatically routed to Reasoning / MoE model tier for Math
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "auto",
-    "messages": [{"role": "user", "content": "Solve the differential equation dy/dx + 2y = e^(-x)."}]
-  }'
+export ANTHROPIC_BASE_URL="http://localhost:8080"
+export ANTHROPIC_API_KEY="frugal-dummy"
+
+claude --model auto
 ```
 
+---
+
+### 2. Hermes Agent & OpenClaw
+
+For autonomous agent runtimes like [Nous Hermes Agent](https://github.com/NousResearch), **OpenClaw**, or **Pi**:
+
 ```bash
-# Automatically routed to Frontier / Flagship model tier for Legal
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "auto",
-    "messages": [{"role": "user", "content": "What are the legal liability implications in this contract?"}]
-  }'
+export OPENAI_BASE_URL="http://localhost:8080/v1"
+export OPENAI_API_KEY="frugal-dummy"
+
+# Run Hermes Agent with auto-routing
+hermes --model auto
+
+# Run OpenClaw
+openclaw --model auto
 ```
 
-### 2. Explicit Provider & Model Requests
+---
+
+### 3. Cursor, Cline & Roo Code (VS Code / IDEs)
+
+Configure your IDE extension with OpenAI-compatible settings:
+
+| Setting | Value |
+| :--- | :--- |
+| **API Provider** | `OpenAI Compatible` |
+| **Base URL** | `http://localhost:8080/v1` |
+| **Model ID** | `auto` *(or `frugal-router`)* |
+| **API Key** | `frugal-dummy` *(or your configured proxy key)* |
+
+---
+
+### 4. Aider (Terminal Pair Programming)
 
 ```bash
-# Direct provider routing
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "openai/gpt-4o",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-```
+export OPENAI_API_BASE="http://localhost:8080/v1"
+export OPENAI_API_KEY="frugal-dummy"
 
-```bash
-# Direct provider streaming
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "anthropic/claude-sonnet-5",
-    "messages": [{"role": "user", "content": "Explain quantum computing in one sentence."}],
-    "stream": true
-  }'
+aider --model openai/auto
 ```
 
 ---
@@ -208,48 +179,6 @@ Incoming Prompt ("model": "auto")
 └────────────────────────────────────────────────────────┘
 ```
 
-### Configuration & Deployment Modes
-
-#### Option A: Hosted TypeSafe API (Cloud)
-
-To use hosted TypeSafe Jev, export your API key:
-
-```bash
-export FRUGAL_LLM_TYPESAFE_API_KEY="ts-..."
-```
-
-In `config.yaml`:
-```yaml
-dynamic_routing:
-  classifiers:
-    - name: "typesafe-jev"
-      type: "system-one"
-      base_url: "https://api.typesafe.ai/v1"
-      api_key: "${FRUGAL_LLM_TYPESAFE_API_KEY}"
-      model: "jev-latest"
-      confidence_threshold: 0.70  # Min confidence (0.0–1.0) to accept choice
-      timeout_ms: 3000
-      max_prompt_chars: 4000
-```
-> **Zero-Overhead Skipping:** If `FRUGAL_LLM_TYPESAFE_API_KEY` is not exported, Frugal LLM automatically skips remote System One endpoints with 0ms overhead and routes directly through the next classifier in the pipeline.
-
-#### Option B: Self-Hosted Open-Weights (Kev / Open-Jev)
-
-If you run open-weights decision models locally (via vLLM, SGLang, or custom Kev runtime at `http://localhost:8009/v1`):
-
-```yaml
-dynamic_routing:
-  classifiers:
-    - name: "local-kev"
-      type: "system-one"
-      base_url: "http://localhost:8009/v1"
-      model: "kev-latest"         # Options: "kev-latest", "kev-4b", "open-jev-9b"
-      confidence_threshold: 0.75
-      timeout_ms: 2000
-      max_prompt_chars: 4000
-```
-> Local endpoints (`localhost`, `127.0.0.1`, `0.0.0.0`) remain active without requiring an API key.
-
 ### Configuration Parameters
 
 | Parameter | Type | Default | Description |
@@ -260,6 +189,183 @@ dynamic_routing:
 | `confidence_threshold` | `float` | `0.70` | Minimum probability score (0.0 to 1.0) required to accept the choice. If below, falls back to the next classifier. |
 | `timeout_ms` | `int` | `3000` | Maximum decision timeout before failing over to the next classifier. |
 | `max_prompt_chars` | `int` | `4000` | Input prompt character cap for classification (does not truncate the prompt sent to the destination model). |
+
+---
+
+## Advanced Setup & Deployment
+
+### 1. Custom YAML Configuration
+
+To customize endpoints, model lists, cost factors (`$0`, `$`, `$$`, `$$$`, `$$$$`), or retry budgets:
+
+1. Copy the default configuration file:
+   ```bash
+   cp config.yaml my_custom_config.yaml
+   ```
+2. Mount your custom configuration into the Docker container:
+
+   - **macOS / Linux**:
+     ```bash
+     docker run -d --name frugal-llm \
+       -p 8080:8080 \
+       --env-file .env \
+       -v $(pwd)/my_custom_config.yaml:/app/config.yaml \
+       yangbaepark/frugal-llm:latest
+     ```
+
+   - **Windows (PowerShell)**:
+     ```powershell
+     docker run -d --name frugal-llm `
+       -p 8080:8080 `
+       --env-file .env `
+       -v ${PWD}/my_custom_config.yaml:/app/config.yaml `
+       yangbaepark/frugal-llm:latest
+     ```
+
+   - **Windows (Command Prompt / CMD)**:
+     ```cmd
+     docker run -d --name frugal-llm -p 8080:8080 --env-file .env -v %cd%/my_custom_config.yaml:/app/config.yaml yangbaepark/frugal-llm:latest
+     ```
+
+---
+
+### 2. Docker Compose (Universal for macOS / Linux / Windows)
+
+Create a `docker-compose.yaml` file:
+
+```yaml
+services:
+  frugal-llm:
+    image: yangbaepark/frugal-llm:latest # or ghcr.io/yangbaepark/frugal-llm:latest
+    container_name: frugal-llm
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    # Optional: Mount custom config
+    # volumes:
+    #   - ./my_custom_config.yaml:/app/config.yaml
+    restart: unless-stopped
+```
+
+Start the service:
+```bash
+docker compose up -d
+```
+
+---
+
+### 3. Connecting Docker to Host Local Models (Ollama / LM Studio)
+
+If you run local models (e.g. Ollama, LM Studio, llama.cpp) on your host machine:
+
+- **macOS & Windows (Docker Desktop / WSL2)**:
+  ```bash
+  docker run -d --name frugal-llm \
+    -p 8080:8080 \
+    -e FRUGAL_LLM_LOCAL_BASE_URL="http://host.docker.internal:11434/v1" \
+    yangbaepark/frugal-llm:latest
+  ```
+
+- **Linux (Native Docker Engine)**:
+  ```bash
+  docker run -d --name frugal-llm \
+    -p 8080:8080 \
+    --add-host=host.docker.internal:host-gateway \
+    -e FRUGAL_LLM_LOCAL_BASE_URL="http://host.docker.internal:11434/v1" \
+    yangbaepark/frugal-llm:latest
+  ```
+
+---
+
+### 4. Python & TypeScript SDK Integrations
+
+You can integrate Frugal LLM into custom agents using standard OpenAI SDKs or frameworks (LangChain, AutoGen, CrewAI, LlamaIndex):
+
+#### Python SDK
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:8080/v1",
+    api_key="frugal-dummy",
+)
+
+# "auto" dynamically routes to the best model based on prompt complexity
+response = client.chat.completions.create(
+    model="auto",
+    messages=[
+        {"role": "user", "content": "Analyze and resolve the concurrency deadlock in this Go routine."}
+    ],
+)
+print(response.choices[0].message.content)
+```
+
+#### TypeScript / Node.js SDK
+```typescript
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:8080/v1",
+  apiKey: "frugal-dummy",
+});
+
+const response = await client.chat.completions.create({
+  model: "auto",
+  messages: [{ role: "user", content: "Write a high-performance regex for email validation." }],
+});
+
+console.log(response.choices[0].message.content);
+```
+
+---
+
+### 5. Running from Source (Go & Make)
+
+#### Prerequisites
+- Go 1.22+
+- (Optional) `make`
+
+#### Step 1: Export Environment Variables
+
+- **macOS / Linux (Bash / Zsh)**:
+  ```bash
+  export FRUGAL_LLM_OPENAI_API_KEY="sk-..."
+  export FRUGAL_LLM_ANTHROPIC_API_KEY="sk-ant-..."
+  export FRUGAL_LLM_GEMINI_API_KEY="AIzaSy..."
+  export FRUGAL_LLM_DEEPSEEK_API_KEY="sk-..."
+  export FRUGAL_LLM_GROQ_API_KEY="gsk_..."
+  export FRUGAL_LLM_TOGETHER_API_KEY="..."
+  export FRUGAL_LLM_TYPESAFE_API_KEY="ts-..."
+  export FRUGAL_LLM_LOCAL_BASE_URL="http://localhost:11434/v1"
+  ```
+
+- **Windows (PowerShell)**:
+  ```powershell
+  $env:FRUGAL_LLM_OPENAI_API_KEY="sk-..."
+  $env:FRUGAL_LLM_ANTHROPIC_API_KEY="sk-ant-..."
+  $env:FRUGAL_LLM_GEMINI_API_KEY="AIzaSy..."
+  $env:FRUGAL_LLM_DEEPSEEK_API_KEY="sk-..."
+  $env:FRUGAL_LLM_GROQ_API_KEY="gsk_..."
+  $env:FRUGAL_LLM_TOGETHER_API_KEY="..."
+  $env:FRUGAL_LLM_TYPESAFE_API_KEY="ts-..."
+  $env:FRUGAL_LLM_LOCAL_BASE_URL="http://localhost:11434/v1"
+  ```
+
+#### Step 2: Run or Build
+
+- **Using `make` (macOS / Linux / WSL2)**:
+  ```bash
+  make run           # Run server directly
+  make build         # Build binary to bin/frugal-llm
+  make test          # Run test suite
+  make cross-compile # Compile static binaries for Linux, macOS, and Windows
+  ```
+
+- **Using standard Go CLI**:
+  ```bash
+  go run cmd/proxy-server/main.go
+  ```
 
 ---
 
