@@ -43,7 +43,7 @@ func NewRouter(cfg *config.Config) *Router {
 
 	// 1. Instantiates adapters for all configured provider instances
 	for pName, pConfig := range cfg.Providers {
-		ad, active := adapter.CreateAdapter(pName, pConfig.Type, pConfig.BaseURL, pConfig.APIKey)
+		ad, active := adapter.CreateAdapter(pName, pConfig.Type, pConfig.BaseURL, pConfig.APIKey, pConfig.Bedrock)
 		if active {
 			r.adapters[pName] = ad
 			logger.Infof("[Proxy] Registered provider instance '%s' (Type: %s, Endpoint: %s)", pName, pConfig.Type, pConfig.BaseURL)

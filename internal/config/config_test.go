@@ -377,3 +377,134 @@ dynamic_routing:
 		t.Errorf("Classifier 1 unexpected: %+v", cfg.DynamicRouting.Classifiers[1])
 	}
 }
+
+func TestAzureAndBedrockConfigParsing(t *testing.T) {
+	t.Setenv("TEST_AZURE_KEY", "az-secret-123")
+	t.Setenv("TEST_AWS_KEY_ID", "AKIA_TEST_ID")
+	t.Setenv("TEST_AWS_SECRET", "SECRET_TEST")
+
+	tmpFile, err := os.CreateTemp("", "config_cloud_*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp config file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	content := `
+server:
+  port: "8080"
+providers:
+  - name: "azure"
+    type: "azure"
+    base_url: "https://my-resource.openai.azure.com/openai/v1"
+    api_key: "${TEST_AZURE_KEY}"
+    models:
+      - name: "gpt-4o"
+        description: "Azure GPT-4o"
+  - name: "bedrock"
+    type: "bedrock"
+    bedrock:
+      region: "us-west-2"
+      access_key_id: "${TEST_AWS_KEY_ID}"
+      secret_access_key: "${TEST_AWS_SECRET}"
+    models:
+      - name: "anthropic.claude-sonnet-5-5:0"
+        description: "AWS Bedrock Claude Sonnet 5.5"
+dynamic_routing:
+  classifiers:
+    - name: "llm-classifier"
+      type: "llm"
+      provider: "azure"
+      model: "gpt-4o"
+`
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("Failed to write to temp config file: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := LoadConfig(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	// Verify Azure provider
+	azureProv, ok := cfg.Providers["azure"]
+	if !ok {
+		t.Fatalf("Expected azure provider to be active")
+	}
+	if azureProv.Type != "azure" {
+		t.Errorf("Expected azure type 'azure', got '%s'", azureProv.Type)
+	}
+	if azureProv.APIKey != "az-secret-123" {
+		t.Errorf("Expected azure APIKey 'az-secret-123', got '%s'", azureProv.APIKey)
+	}
+
+	// Verify Bedrock provider
+	bedrockProv, ok := cfg.Providers["bedrock"]
+	if !ok {
+		t.Fatalf("Expected bedrock provider to be active")
+	}
+	if bedrockProv.Type != "bedrock" {
+		t.Errorf("Expected bedrock type 'bedrock', got '%s'", bedrockProv.Type)
+	}
+	// Verify default region us-west-2 was derived into BaseURL
+	expectedBaseURL := "https://bedrock-runtime.us-west-2.amazonaws.com"
+	if bedrockProv.BaseURL != expectedBaseURL {
+		t.Errorf("Expected derived bedrock BaseURL '%s', got '%s'", expectedBaseURL, bedrockProv.BaseURL)
+	}
+	if bedrockProv.Bedrock == nil || bedrockProv.Bedrock.AccessKeyID != "AKIA_TEST_ID" {
+		t.Errorf("Expected Bedrock.AccessKeyID 'AKIA_TEST_ID', got %+v", bedrockProv.Bedrock)
+	}
+}
+
+func TestBedrockSkippedWhenNoEnvVarsAndNoProfile(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "config_skip_bedrock_*.yaml")
+	if err != nil {
+		t.Fatalf("Failed to create temp config file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// No env vars set, Bedrock configured with empty values
+	content := `
+server:
+  port: "8080"
+providers:
+  - name: "mock-local"
+    type: "openai"
+    base_url: "http://localhost:8080/v1"
+    models:
+      - name: "local-model"
+        description: "Local model"
+  - name: "bedrock"
+    type: "bedrock"
+    bedrock:
+      region: "${FRUGAL_LLM_AWS_REGION}"
+      access_key_id: "${FRUGAL_LLM_AWS_ACCESS_KEY_ID}"
+      secret_access_key: "${FRUGAL_LLM_AWS_SECRET_ACCESS_KEY}"
+      session_token: "${FRUGAL_LLM_AWS_SESSION_TOKEN}"
+      profile: "${FRUGAL_LLM_AWS_PROFILE}"
+    models:
+      - name: "anthropic.claude-sonnet-5-5:0"
+        description: "AWS Bedrock Claude Sonnet 5.5"
+dynamic_routing:
+  fallback_model: "mock-local/local-model"
+  classifiers:
+    - name: "llm-classifier"
+      type: "llm"
+      provider: "mock-local"
+      model: "local-model"
+`
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("Failed to write temp file: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := LoadConfig(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+
+	// Bedrock must be skipped entirely
+	if _, ok := cfg.Providers["bedrock"]; ok {
+		t.Errorf("Expected bedrock provider to be skipped, but it was registered")
+	}
+}

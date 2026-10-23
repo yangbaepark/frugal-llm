@@ -26,6 +26,8 @@ Different tasks require distinct model capabilities, parameters, and architectur
 - **OpenAI**
 - **Google Gemini**
 - **Anthropic Claude**
+- **AWS Bedrock** (Converse API with SigV4 signing & `~/.aws/credentials` dynamic hot-reloading)
+- **Azure AI Foundry** (OpenAI Protocol & Model Catalog inference)
 - **DeepSeek** (OpenAI Protocol)
 - **Groq** (OpenAI Protocol)
 - **Together AI** (OpenAI Protocol)
@@ -52,7 +54,7 @@ Different tasks require distinct model capabilities, parameters, and architectur
 
 The fastest way to run Frugal LLM is using the official multi-architecture Docker image (`linux/amd64`, `linux/arm64`) from **Docker Hub** or **GitHub Container Registry (GHCR)**.
 
-### 1. Run with Docker (Zero-Edit Setup)
+### 1. Run with Docker (Zero-Edit Setup via Environment Variables)
 
 Simply pass your API keys directly to the container — Frugal LLM automatically enables any provider whose key is present:
 
@@ -66,12 +68,32 @@ docker run -d --name frugal-llm \
   -e FRUGAL_LLM_GROQ_API_KEY="gsk_..." \
   -e FRUGAL_LLM_TOGETHER_API_KEY="..." \
   -e FRUGAL_LLM_TYPESAFE_API_KEY="ts-..." \
+  -e FRUGAL_LLM_AZURE_BASE_URL="https://<resource>.openai.azure.com/openai/v1" \
+  -e FRUGAL_LLM_AZURE_API_KEY="..." \
+  -e FRUGAL_LLM_AWS_REGION="us-west-2" \
+  -e FRUGAL_LLM_AWS_ACCESS_KEY_ID="..." \
+  -e FRUGAL_LLM_AWS_SECRET_ACCESS_KEY="..." \
   yangbaepark/frugal-llm:latest
 ```
 
 *(Or from GHCR: `ghcr.io/yangbaepark/frugal-llm:latest`)*
 
-### 2. Or Pass an `.env` File
+### 2. Using AWS Bedrock via Local AWS Profile
+
+If you use AWS SSO, temporary STS tokens, or prefer mounting your host's `~/.aws` directory with automatic hot-reloading:
+
+```bash
+docker run -d --name frugal-llm \
+  -p 8080:8080 \
+  -e FRUGAL_LLM_OPENAI_API_KEY="sk-..." \
+  -e FRUGAL_LLM_AWS_PROFILE="default" \
+  -v ~/.aws:/root/.aws:ro \
+  yangbaepark/frugal-llm:latest
+```
+
+*(Note: Mount `~/.aws:/root/.aws:ro` and provide `FRUGAL_LLM_AWS_PROFILE`. Frugal LLM reads credentials from `~/.aws/credentials` and region from `~/.aws/config`, hot-reloading when background tools refresh tokens).*
+
+### 3. Or Pass an `.env` File
 
 ```bash
 docker run -d --name frugal-llm \
@@ -337,6 +359,15 @@ console.log(response.choices[0].message.content);
   export FRUGAL_LLM_GROQ_API_KEY="gsk_..."
   export FRUGAL_LLM_TOGETHER_API_KEY="..."
   export FRUGAL_LLM_TYPESAFE_API_KEY="ts-..."
+  export FRUGAL_LLM_AZURE_BASE_URL="https://<resource>.openai.azure.com/openai/v1"
+  export FRUGAL_LLM_AZURE_API_KEY="..."
+  # AWS Bedrock Option A: Via Environment Variables (must have region, access_key_id, secret_access_key)
+  export FRUGAL_LLM_AWS_REGION="us-west-2"
+  export FRUGAL_LLM_AWS_ACCESS_KEY_ID="..."
+  export FRUGAL_LLM_AWS_SECRET_ACCESS_KEY="..."
+  export FRUGAL_LLM_AWS_SESSION_TOKEN="..."     # Optional
+  # AWS Bedrock Option B: Via Local AWS Profile (reads ~/.aws/credentials + ~/.aws/config)
+  # export FRUGAL_LLM_AWS_PROFILE="default"
   export FRUGAL_LLM_LOCAL_BASE_URL="http://localhost:11434/v1"
   ```
 
@@ -349,6 +380,14 @@ console.log(response.choices[0].message.content);
   $env:FRUGAL_LLM_GROQ_API_KEY="gsk_..."
   $env:FRUGAL_LLM_TOGETHER_API_KEY="..."
   $env:FRUGAL_LLM_TYPESAFE_API_KEY="ts-..."
+  $env:FRUGAL_LLM_AZURE_BASE_URL="https://<resource>.openai.azure.com/openai/v1"
+  $env:FRUGAL_LLM_AZURE_API_KEY="..."
+  # AWS Bedrock Option A: Via Environment Variables
+  $env:FRUGAL_LLM_AWS_REGION="us-west-2"
+  $env:FRUGAL_LLM_AWS_ACCESS_KEY_ID="..."
+  $env:FRUGAL_LLM_AWS_SECRET_ACCESS_KEY="..."
+  # AWS Bedrock Option B: Via Local AWS Profile
+  # $env:FRUGAL_LLM_AWS_PROFILE="default"
   $env:FRUGAL_LLM_LOCAL_BASE_URL="http://localhost:11434/v1"
   ```
 
@@ -380,7 +419,7 @@ frugal-llm/
 ├── templates/
 │   └── classifier_prompt.tmpl # Go template for LLM classifier prompts
 ├── internal/
-│   ├── adapter/          # Provider adapters (OpenAI, Anthropic, Ollama, HuggingFace)
+│   ├── adapter/          # Provider adapters (OpenAI, Anthropic, Bedrock, Azure, Ollama, HuggingFace)
 │   ├── config/           # Strict YAML configuration loader & validation
 │   ├── logger/           # Level-based logger (debug, info, warn, error)
 │   ├── model/            # OpenAI-compatible request/response JSON structs

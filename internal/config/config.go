@@ -101,14 +101,15 @@ type ServerConfig struct {
 
 // ProviderConfig represents configuration for a specific provider instance.
 type ProviderConfig struct {
-	Name         string      `yaml:"name"`           // Unique instance identifier e.g. "openai-main", "work-openai", "deepseek"
-	Type         string      `yaml:"type"`           // Protocol type: "openai", "anthropic", "ollama", "huggingface"
-	BaseURL      string      `yaml:"base_url"`
-	APIKey       string      `yaml:"api_key"`
-	TimeoutMS    int         `yaml:"timeout_ms"`     // Initial HTTP request timeout
-	MaxRetries   int         `yaml:"max_retries"`    // Exponential backoff max retry count
-	MaxTimeoutMS int         `yaml:"max_timeout_ms"` // Cap limit for exponential backoff delay
-	Models       []ModelInfo `yaml:"models"`         // Supported models & use-case descriptions
+	Name         string                  `yaml:"name"`           // Unique instance identifier e.g. "openai-main", "work-openai", "deepseek"
+	Type         string                  `yaml:"type"`           // Protocol type: "openai", "anthropic", "azure", "bedrock", "ollama", "huggingface"
+	BaseURL      string                  `yaml:"base_url"`
+	APIKey       string                  `yaml:"api_key"`
+	TimeoutMS    int                     `yaml:"timeout_ms"`     // Initial HTTP request timeout
+	MaxRetries   int                     `yaml:"max_retries"`    // Exponential backoff max retry count
+	MaxTimeoutMS int                     `yaml:"max_timeout_ms"` // Cap limit for exponential backoff delay
+	Models       []ModelInfo             `yaml:"models"`         // Supported models & use-case descriptions
+	Bedrock      *adapter.BedrockOptions `yaml:"bedrock,omitempty"`
 }
 
 // RawYAMLConfig matches the YAML file structure.
@@ -232,10 +233,17 @@ func loadYAMLConfig(path string) (*Config, error) {
 		p.BaseURL = baseURL
 		p.APIKey = apiKey
 
+		if p.Type == "bedrock" && p.BaseURL == "" {
+			region := adapter.ResolveBedrockRegion(p.Bedrock)
+			if region != "" {
+				p.BaseURL = fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", region)
+			}
+		}
+
 		cfg.DefinedProviders[pName] = true
 
 		// Check activation via provider adapter implementation
-		if !adapter.IsActive(p.Name, p.Type, p.BaseURL, p.APIKey) {
+		if !adapter.IsActive(p.Name, p.Type, p.BaseURL, p.APIKey, p.Bedrock) {
 			logger.Debugf("Provider instance '%s' skipped (inactive / missing credentials)", pName)
 			continue
 		}
@@ -434,19 +442,4 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
-}
-
-func getEnv(key, fallback string) string {
-	prefixedKey := EnvPrefix + key
-	if val, ok := os.LookupEnv(prefixedKey); ok && strings.TrimSpace(val) != "" {
-		return strings.TrimSpace(val)
-	}
-	legacyKey := "SMART_LLM_PROXY_" + key
-	if val, ok := os.LookupEnv(legacyKey); ok && strings.TrimSpace(val) != "" {
-		return strings.TrimSpace(val)
-	}
-	if val, ok := os.LookupEnv(key); ok && strings.TrimSpace(val) != "" {
-		return strings.TrimSpace(val)
-	}
-	return fallback
 }

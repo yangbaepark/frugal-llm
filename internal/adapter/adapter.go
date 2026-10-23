@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"frugal-llm/internal/model"
 )
@@ -20,8 +21,12 @@ type ProviderAdapter interface {
 
 // CreateAdapter instantiates a ProviderAdapter matching the given provider type if active.
 // Returns (adapter, true) if active, or (nil, false) if inactive / missing required credentials.
-func CreateAdapter(name, provType, baseURL, apiKey string) (ProviderAdapter, bool) {
-	switch provType {
+func CreateAdapter(name, provType, baseURL, apiKey string, bedrockOpts *BedrockOptions) (ProviderAdapter, bool) {
+	switch strings.ToLower(strings.TrimSpace(provType)) {
+	case "azure":
+		return NewAzureAdapter(name, baseURL, apiKey)
+	case "bedrock":
+		return NewBedrockAdapter(baseURL, bedrockOpts)
 	case "anthropic":
 		return NewAnthropicAdapter(baseURL, apiKey)
 	case "ollama":
@@ -36,7 +41,7 @@ func CreateAdapter(name, provType, baseURL, apiKey string) (ProviderAdapter, boo
 }
 
 // IsActive checks if a provider instance has all necessary settings to be activated.
-func IsActive(name, provType, baseURL, apiKey string) bool {
-	_, active := CreateAdapter(name, provType, baseURL, apiKey)
+func IsActive(name, provType, baseURL, apiKey string, bedrockOpts *BedrockOptions) bool {
+	_, active := CreateAdapter(name, provType, baseURL, apiKey, bedrockOpts)
 	return active
 }

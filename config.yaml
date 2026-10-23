@@ -14,6 +14,15 @@
 #     export FRUGAL_LLM_GROQ_API_KEY="gsk_..."
 #     export FRUGAL_LLM_TOGETHER_API_KEY="..."
 #     export FRUGAL_LLM_TYPESAFE_API_KEY="ts-..." # For ultra-fast System One / Jev dynamic routing
+#     export FRUGAL_LLM_AZURE_API_KEY="..."       # For Azure AI Foundry
+#     export FRUGAL_LLM_AZURE_BASE_URL="https://<resource>.openai.azure.com/openai/v1"
+#
+#   AWS Bedrock (Activated when FRUGAL_LLM_AWS_* env vars exist or ~/.aws/credentials profile is found):
+#     export FRUGAL_LLM_AWS_ACCESS_KEY_ID="..."     # (Optional if ~/.aws/credentials exists)
+#     export FRUGAL_LLM_AWS_SECRET_ACCESS_KEY="..."
+#     export FRUGAL_LLM_AWS_REGION="us-west-2"      # Defaults to us-west-2 if omitted
+#     export FRUGAL_LLM_AWS_SESSION_TOKEN="..."     # Optional: for temporary STS tokens
+#     export FRUGAL_LLM_AWS_PROFILE="default"       # Optional: defaults to 'default' profile
 #
 #   Local LLM Server (Activated when base URL is exported):
 #     export FRUGAL_LLM_LOCAL_BASE_URL="http://localhost:1234/v1"   # e.g., LM Studio, llama.cpp, vLLM
@@ -45,16 +54,13 @@ providers:
     models:
       - name: "gpt-6-astra"
         cost_factor: "$$$$"
-        description: "Frontier flagship reasoning model, best for autonomous agent orchestration, deep scientific discovery, formal logic, and complex system design."
-      - name: "gpt-5.6-sol"
+        description: "Frontier flagship reasoning model, best for deep scientific discovery, formal logic, complex system architecture, and advanced mathematical proofs."
+      - name: "gpt-6.1-sol"
         cost_factor: "$$$"
         description: "Frontier precision model, best for statutory law, compliance, formal verification, and contract analysis."
-      - name: "gpt-5.6-terra"
-        cost_factor: "$$"
-        description: "Balanced workhorse model, best for software engineering, workflow automation, and general coding."
-      - name: "gpt-4o"
-        cost_factor: "$$"
-        description: "Flagship multimodal model, balanced across high-speed reasoning, vision, and general chat."
+      - name: "gpt-6-luna"
+        cost_factor: "$"
+        description: "High-speed lightweight model, best for rapid queries, data extraction, routing, and high-frequency routine interactions."
 
   # 2. Secondary / Work OpenAI Account
   - name: "work-openai"
@@ -62,9 +68,9 @@ providers:
     base_url: "https://api.openai.com/v1"
     api_key: "${FRUGAL_LLM_WORK_OPENAI_API_KEY}"
     models:
-      - name: "gpt-4o"
-        cost_factor: "$$"
-        description: "Enterprise OpenAI instance flagship model."
+      - name: "gpt-6-astra"
+        cost_factor: "$$$$"
+        description: "Enterprise OpenAI instance flagship frontier model."
 
   # 3. DeepSeek (OpenAI-compatible protocol)
   - name: "deepseek"
@@ -168,6 +174,48 @@ providers:
       - name: "gemini-3.8-flash"
         cost_factor: "$"
         description: "High-speed agentic workhorse, best for software engineering, agentic tool-calling pipelines, rapid codebase refactoring, and controllable-depth reasoning."
+
+  # 9. Azure AI Foundry (OpenAI Protocol / Model Inference)
+  # Activated when FRUGAL_LLM_AZURE_BASE_URL and FRUGAL_LLM_AZURE_API_KEY are exported
+  - name: "azure"
+    type: "azure"
+    base_url: "${FRUGAL_LLM_AZURE_BASE_URL}" # e.g. "https://<resource>.openai.azure.com/openai/v1" or "https://<resource>.models.ai.azure.com"
+    api_key: "${FRUGAL_LLM_AZURE_API_KEY}"
+    models:
+      - name: "gpt-6-astra"
+        cost_factor: "$$$$"
+        description: "Frontier flagship reasoning model, best for deep scientific discovery, formal logic, complex system architecture, and advanced mathematical proofs."
+      - name: "gpt-6.1-sol"
+        cost_factor: "$$$"
+        description: "Frontier precision model, best for statutory law, compliance, formal verification, and contract analysis."
+      - name: "gpt-6-luna"
+        cost_factor: "$"
+        description: "High-speed lightweight model, best for rapid queries, data extraction, routing, and high-frequency routine interactions."
+
+  # 10. AWS Bedrock (Converse API with SigV4 Signing)
+  # Priority: FRUGAL_LLM_AWS_* env vars -> AWS profile (credentials + config region) -> skipped
+  - name: "bedrock"
+    type: "bedrock"
+    base_url: "" # Optional: auto-defaults to https://bedrock-runtime.{region}.amazonaws.com
+    bedrock:
+      region: "${FRUGAL_LLM_AWS_REGION}"
+      access_key_id: "${FRUGAL_LLM_AWS_ACCESS_KEY_ID}"
+      secret_access_key: "${FRUGAL_LLM_AWS_SECRET_ACCESS_KEY}"
+      session_token: "${FRUGAL_LLM_AWS_SESSION_TOKEN}" # Optional
+      profile: "${FRUGAL_LLM_AWS_PROFILE}"
+    models:
+      - name: "anthropic.claude-fable-5-1:0"
+        cost_factor: "$$$$"
+        description: "AWS Bedrock Claude Fable 5.1 frontier flagship model, best for massive complex research, complicated architecture design, and deep system refactoring."
+      - name: "anthropic.claude-opus-5-5:0"
+        cost_factor: "$$$"
+        description: "AWS Bedrock Claude Opus 5.5 deep reasoning model, best for math, formal logic, concurrency debugging, kernel programming, and complex multi-step algorithms."
+      - name: "anthropic.claude-sonnet-5-5:0"
+        cost_factor: "$$"
+        description: "AWS Bedrock Claude Sonnet 5.5 flagship coding and reasoning model, best for software development, agentic coding workflows, refactoring, and general logic."
+      - name: "anthropic.claude-haiku-5-5:0"
+        cost_factor: "$"
+        description: "AWS Bedrock Claude Haiku 5.5 high-speed model, best for rapid queries, text cleanup, lightweight summaries, and high-throughput tasks."
 
 # Dynamic Provider & Model Selection Layer
 dynamic_routing:
