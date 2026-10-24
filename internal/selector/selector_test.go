@@ -45,10 +45,8 @@ func testProviders() map[string]config.ProviderConfig {
 
 func testConfig() config.DynamicRoutingConfig {
 	return config.DynamicRoutingConfig{
-		TriggerMode:      "always",
-		AutoAliases:      []string{"auto", "frugal-router"},
-		FallbackProvider: "anthropic",
-		FallbackModel:    "claude-sonnet-5",
+		TriggerMode: "always",
+		AutoAliases: []string{"auto", "frugal-router"},
 		Classifiers: []config.ClassifierConfig{
 			{
 				Name: "llm-classifier",
@@ -120,11 +118,11 @@ func TestClassifierFallbackOnFailure(t *testing.T) {
 	}
 
 	gotModel, reason := sel.SelectModel(context.Background(), req)
-	if gotModel != "anthropic/claude-sonnet-5" {
-		t.Errorf("Expected fallback model 'anthropic/claude-sonnet-5', got %v", gotModel)
+	if gotModel != "" {
+		t.Errorf("Expected empty model on classifier failure, got %v", gotModel)
 	}
-	if reason != "Fallback Model" {
-		t.Errorf("Expected reason 'Fallback Model', got %v", reason)
+	if !strings.Contains(reason, "all classifiers failed") {
+		t.Errorf("Expected fail-fast reason, got %v", reason)
 	}
 }
 
@@ -249,8 +247,6 @@ func TestSystemOneClassifierSuccess(t *testing.T) {
 	defer ts.Close()
 
 	cfg := config.DynamicRoutingConfig{
-		FallbackProvider: "anthropic",
-		FallbackModel:    "claude-sonnet-5",
 		Classifiers: []config.ClassifierConfig{
 			{
 				Name: "system-one-classifier",
@@ -302,8 +298,6 @@ func TestSystemOneClassifierConfidenceFallbackToLLM(t *testing.T) {
 	defer ts.Close()
 
 	cfg := config.DynamicRoutingConfig{
-		FallbackProvider: "anthropic",
-		FallbackModel:    "claude-sonnet-5",
 		Classifiers: []config.ClassifierConfig{
 			{
 				Name: "fast-system-one",
@@ -350,8 +344,6 @@ func TestSystemOneClassifierServerErrorFallbackToLLM(t *testing.T) {
 	defer ts.Close()
 
 	cfg := config.DynamicRoutingConfig{
-		FallbackProvider: "anthropic",
-		FallbackModel:    "claude-sonnet-5",
 		Classifiers: []config.ClassifierConfig{
 			{
 				Name: "system-one-classifier",
@@ -397,8 +389,6 @@ func TestSystemOneClassifierAllFailFallbackToDefault(t *testing.T) {
 	defer ts.Close()
 
 	cfg := config.DynamicRoutingConfig{
-		FallbackProvider: "anthropic",
-		FallbackModel:    "claude-sonnet-5",
 		Classifiers: []config.ClassifierConfig{
 			{
 				Name: "system-one-classifier",
@@ -428,10 +418,10 @@ func TestSystemOneClassifierAllFailFallbackToDefault(t *testing.T) {
 	}
 
 	gotModel, reason := sel.SelectModel(context.Background(), req)
-	if gotModel != "anthropic/claude-sonnet-5" {
-		t.Errorf("Expected ultimate fallback 'anthropic/claude-sonnet-5', got %v", gotModel)
+	if gotModel != "" {
+		t.Errorf("Expected empty model on fail fast, got %v", gotModel)
 	}
-	if reason != "Fallback Model" {
-		t.Errorf("Expected reason 'Fallback Model', got %v", reason)
+	if !strings.Contains(reason, "all classifiers failed") {
+		t.Errorf("Expected fail-fast reason, got %v", reason)
 	}
 }

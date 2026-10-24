@@ -56,13 +56,14 @@ type PromptData struct {
 
 // DynamicSelector manages LLM-based and System One classification for model selection.
 type DynamicSelector struct {
-	cfg         config.DynamicRoutingConfig
-	providers   []ProviderGroup
-	targetsMap  map[string]string // maps lower-case target strings to canonical "provider/model"
-	aliasesMap  map[string]bool
-	executor    ClassificationExecutor
-	promptTmpl  *template.Template
-	httpClient  *http.Client
+	cfg             config.DynamicRoutingConfig
+	providers       []ProviderGroup
+	targetsMap      map[string]string // maps lower-case target strings to canonical "provider/model"
+	aliasesMap      map[string]bool
+	activeProviders map[string]bool
+	executor        ClassificationExecutor
+	promptTmpl      *template.Template
+	httpClient      *http.Client
 }
 
 // NewDynamicSelector initializes dynamic routing rules and builds candidate provider model pools.
@@ -72,10 +73,12 @@ func NewDynamicSelector(cfg config.DynamicRoutingConfig, providerConfigs map[str
 		aliasesMap[strings.ToLower(alias)] = true
 	}
 
+	activeProviders := make(map[string]bool)
 	var providerGroups []ProviderGroup
 	targetsMap := make(map[string]string)
 
 	for pName, pConfig := range providerConfigs {
+		activeProviders[strings.ToLower(pName)] = true
 		if len(pConfig.Models) > 0 {
 			group := ProviderGroup{
 				Name:   pName,
@@ -155,8 +158,6 @@ func (s *DynamicSelector) ShouldSelect(modelName string) bool {
 
 // SelectModel evaluates the prompt through the prioritized classifiers pipeline.
 func (s *DynamicSelector) SelectModel(ctx context.Context, req *model.ChatCompletionRequest) (string, string) {
-	fallbackTarget := FormatTargetModel(s.cfg.FallbackProvider, s.cfg.FallbackModel)
-
 	for _, c := range s.cfg.Classifiers {
 		switch strings.ToLower(c.Type) {
 		case "system-one":
@@ -175,6 +176,11 @@ func (s *DynamicSelector) SelectModel(ctx context.Context, req *model.ChatComple
 			logger.Warnf("System One classification via classifier '%s' failed or below confidence threshold (%v). Trying next pipeline option...", c.Name, err)
 
 		case "llm":
+			pName := strings.ToLower(strings.TrimSpace(c.LLM.Provider))
+			if s.activeProviders != nil && !s.activeProviders[pName] {
+				logger.Debugf("[Classifier] Skipping LLM classifier '%s' (inactive provider '%s')", c.Name, c.LLM.Provider)
+				continue
+			}
 			prompt := ExtractPrompt(req, c.LLM.MaxPromptChars)
 			if prompt == "" {
 				continue
@@ -189,8 +195,8 @@ func (s *DynamicSelector) SelectModel(ctx context.Context, req *model.ChatComple
 		}
 	}
 
-	// Default Fallback
-	return fallbackTarget, "Fallback Model"
+	// Fail fast when all classifiers are exhausted
+	return "", "all classifiers failed or timed out"
 }
 
 func (s *DynamicSelector) classifyWithLLM(ctx context.Context, cfg config.LLMClassifierConfig, prompt string) (string, error) {

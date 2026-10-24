@@ -486,7 +486,6 @@ providers:
       - name: "anthropic.claude-sonnet-5-5:0"
         description: "AWS Bedrock Claude Sonnet 5.5"
 dynamic_routing:
-  fallback_model: "mock-local/local-model"
   classifiers:
     - name: "llm-classifier"
       type: "llm"

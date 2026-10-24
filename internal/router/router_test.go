@@ -95,10 +95,8 @@ func TestRouterDynamicSelectionWithLLMClassifier(t *testing.T) {
 			},
 		},
 		DynamicRouting: config.DynamicRoutingConfig{
-			TriggerMode:      "always",
-			AutoAliases:      []string{"auto"},
-			FallbackProvider: "anthropic",
-			FallbackModel:    "claude-sonnet-5",
+			TriggerMode: "always",
+			AutoAliases: []string{"auto"},
 			Classifiers: []config.ClassifierConfig{
 				{
 					Name: "llm-classifier",

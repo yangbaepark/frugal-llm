@@ -138,16 +138,16 @@ providers:
     base_url: "https://api.anthropic.com/v1"
     api_key: "${FRUGAL_LLM_ANTHROPIC_API_KEY}"
     models:
-      - name: "claude-fable-5"
+      - name: "claude-fable-5-1"
         cost_factor: "$$$$"
-        description: "Frontier flagship model, best for massive, complex research, complicated architecture design, and deep system refactoring."
-      - name: "claude-opus-5"
+        description: "Frontier flagship model, best for massive complex research, complicated architecture design, and deep system refactoring."
+      - name: "claude-opus-5-5"
         cost_factor: "$$$"
-        description: "Deep reasoning model, best for math, formal logic, concurrency debugging, kernel programming, and complex algorithms."
-      - name: "claude-sonnet-5"
+        description: "Deep reasoning model, best for math, formal logic, concurrency debugging, kernel programming, and complex multi-step algorithms."
+      - name: "claude-sonnet-5-5"
         cost_factor: "$$"
         description: "Flagship coding and reasoning model, best for software development, agentic coding workflows, refactoring, and general logic."
-      - name: "claude-haiku-5"
+      - name: "claude-haiku-5-5"
         cost_factor: "$"
         description: "High-speed model, best for rapid queries, text cleanup, lightweight summaries, and high-throughput tasks."
 
@@ -223,12 +223,11 @@ dynamic_routing:
   auto_aliases:
     - "auto"
     - "frugal-router"
-  fallback_provider: "local"
-  fallback_model: "local-model"
 
-  # Prioritized Classifier Pipeline
-  # Classifiers are evaluated in order. The first classifier that successfully matches/routes the prompt determines the target.
-  # If a classifier is inactive (missing API key for remote URL), fails, or falls below confidence_threshold, the pipeline seamlessly proceeds to the next classifier.
+  # Prioritized Classifier Pipeline (Ordered by low latency & cost)
+  # Classifiers are evaluated in order. The first classifier that is active and successfully routes the prompt determines the target.
+  # If a classifier is inactive (missing API key or unconfigured endpoint), fails, or falls below confidence threshold,
+  # the pipeline seamlessly advances to the next classifier. If all classifiers fail, routing fails fast with an error.
   classifiers:
     # 1. Primary: Ultra-fast System One Decision Engine (~50-100ms single forward-pass, calibrated probabilities)
     # Automatically activated when FRUGAL_LLM_TYPESAFE_API_KEY is exported (or if base_url is pointed to a local Kev/Open-Jev server)
@@ -237,17 +236,66 @@ dynamic_routing:
       base_url: "https://api.typesafe.ai/v1" # or "http://localhost:8009/v1" for local Kev/Open-Jev server
       api_key: "${FRUGAL_LLM_TYPESAFE_API_KEY}"
       model: "jev-latest"                    # Options: "jev-latest", "kev-latest", "kev-4b", "open-jev-9b"
-      confidence_threshold: 0.70             # Min confidence (0.0-1.0) to accept choice; otherwise falls back to next classifier
+      confidence_threshold: 0.70             # Min confidence (0.0-1.0) to accept choice; otherwise falls through to next classifier
       timeout_ms: 3000
       max_prompt_chars: 4000
 
-    # 2. Secondary: Standard LLM Judge Classifier
-    - name: "llm-classifier"
+    # 2. Local LLM Judge ($0.00 Cost)
+    # Automatically activated when FRUGAL_LLM_LOCAL_BASE_URL is exported (e.g. Ollama, LM Studio, vLLM)
+    - name: "local-classifier"
       type: "llm"
       provider: "local"
       model: "local-model"
       temperature: 0.0
       max_tokens: 300
-      timeout_ms: 60000
+      timeout_ms: 10000
+      max_prompt_chars: 2000
+      prompt_template_path: "templates/classifier_prompt.tmpl"
+
+    # 3. Google Gemini Flash (High-speed, low-cost cloud LLM)
+    # Automatically activated when FRUGAL_LLM_GEMINI_API_KEY is exported
+    - name: "gemini-classifier"
+      type: "llm"
+      provider: "gemini"
+      model: "gemini-3.8-flash"
+      temperature: 0.0
+      max_tokens: 300
+      timeout_ms: 5000
+      max_prompt_chars: 2000
+      prompt_template_path: "templates/classifier_prompt.tmpl"
+
+    # 4. OpenAI Flash (High-speed lightweight cloud LLM)
+    # Automatically activated when FRUGAL_LLM_OPENAI_API_KEY is exported
+    - name: "openai-classifier"
+      type: "llm"
+      provider: "openai"
+      model: "gpt-6-luna"
+      temperature: 0.0
+      max_tokens: 300
+      timeout_ms: 5000
+      max_prompt_chars: 2000
+      prompt_template_path: "templates/classifier_prompt.tmpl"
+
+    # 5. AWS Bedrock Claude Haiku (High-speed cloud LLM)
+    # Automatically activated when FRUGAL_LLM_AWS_* env vars exist or AWS credentials profile is found
+    - name: "bedrock-classifier"
+      type: "llm"
+      provider: "bedrock"
+      model: "anthropic.claude-haiku-5-5:0"
+      temperature: 0.0
+      max_tokens: 300
+      timeout_ms: 5000
+      max_prompt_chars: 2000
+      prompt_template_path: "templates/classifier_prompt.tmpl"
+
+    # 6. Azure AI Foundry Flash (High-speed cloud LLM)
+    # Automatically activated when FRUGAL_LLM_AZURE_BASE_URL and FRUGAL_LLM_AZURE_API_KEY are exported
+    - name: "azure-classifier"
+      type: "llm"
+      provider: "azure"
+      model: "gpt-6-luna"
+      temperature: 0.0
+      max_tokens: 300
+      timeout_ms: 5000
       max_prompt_chars: 2000
       prompt_template_path: "templates/classifier_prompt.tmpl"

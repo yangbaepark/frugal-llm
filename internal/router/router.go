@@ -128,23 +128,6 @@ func (r *Router) selectAdapter(modelName string) (adapter.ProviderAdapter, strin
 		}
 	}
 
-	// Also check default fallback matching for Anthropic
-	if strings.HasPrefix(lowerModel, "claude") {
-		if antAdapter, ok := r.adapters["anthropic"]; ok {
-			return antAdapter, modelName, "anthropic"
-		}
-	}
-
-	// 3. Default fallback to primary "openai" instance
-	if openAIAdapter, ok := r.adapters["openai"]; ok {
-		return openAIAdapter, modelName, "openai"
-	}
-
-	// Fallback to first registered adapter if "openai" is not configured
-	for pName, a := range r.adapters {
-		return a, modelName, pName
-	}
-
 	return nil, modelName, ""
 }
 
@@ -262,6 +245,9 @@ func (r *Router) executeDirect(ctx context.Context, req *model.ChatCompletionReq
 func (r *Router) Execute(ctx context.Context, req *model.ChatCompletionRequest) (*model.ChatCompletionResponse, error) {
 	if r.selector != nil && r.selector.ShouldSelect(req.Model) {
 		selectedModel, reason := r.selector.SelectModel(ctx, req)
+		if selectedModel == "" {
+			return nil, fmt.Errorf("dynamic routing failed: all configured classifiers in pipeline failed or timed out (%s)", reason)
+		}
 		logger.Debugf("[Proxy] Dynamic selection routed '%s' -> '%s' (Reason: %s)", req.Model, selectedModel, reason)
 		req.Model = selectedModel
 	}
@@ -271,6 +257,9 @@ func (r *Router) Execute(ctx context.Context, req *model.ChatCompletionRequest) 
 func (r *Router) ExecuteStream(ctx context.Context, req *model.ChatCompletionRequest, w http.ResponseWriter) error {
 	if r.selector != nil && r.selector.ShouldSelect(req.Model) {
 		selectedModel, reason := r.selector.SelectModel(ctx, req)
+		if selectedModel == "" {
+			return fmt.Errorf("dynamic routing failed: all configured classifiers in pipeline failed or timed out (%s)", reason)
+		}
 		logger.Debugf("[Proxy] Dynamic stream selection routed '%s' -> '%s' (Reason: %s)", req.Model, selectedModel, reason)
 		req.Model = selectedModel
 	}

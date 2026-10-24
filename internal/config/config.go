@@ -78,11 +78,9 @@ type ClassifierConfig struct {
 
 // DynamicRoutingConfig holds settings for dynamic provider/model selection and prioritized classifiers pipeline.
 type DynamicRoutingConfig struct {
-	TriggerMode      string             `yaml:"trigger_mode"` // "always", "alias_only", "alias_or_unprefixed"
-	AutoAliases      []string           `yaml:"auto_aliases"`
-	FallbackProvider string             `yaml:"fallback_provider"`
-	FallbackModel    string             `yaml:"fallback_model"`
-	Classifiers      []ClassifierConfig `yaml:"classifiers"`
+	TriggerMode string             `yaml:"trigger_mode"` // "always", "alias_only", "alias_or_unprefixed"
+	AutoAliases []string           `yaml:"auto_aliases"`
+	Classifiers []ClassifierConfig `yaml:"classifiers"`
 }
 
 // ModelInfo defines a supported model under a provider instance with use-case description and cost factor.
@@ -190,9 +188,6 @@ func loadYAMLConfig(path string) (*Config, error) {
 	}
 	if len(cfg.DynamicRouting.AutoAliases) == 0 {
 		cfg.DynamicRouting.AutoAliases = []string{"auto", "frugal-router"}
-	}
-	if cfg.DynamicRouting.FallbackModel == "" {
-		cfg.DynamicRouting.FallbackModel = "anthropic/claude-sonnet-5"
 	}
 
 	if len(cfg.DynamicRouting.Classifiers) == 0 {
@@ -401,43 +396,8 @@ func (c *Config) Validate() error {
 			}
 			_, active := c.Providers[pName]
 			if !active {
-				// Auto-assign classifier provider to first active provider if defined provider is inactive
-				var firstActiveName string
-				var firstActiveModel string
-				for activeName, activeConfig := range c.Providers {
-					firstActiveName = activeName
-					if len(activeConfig.Models) > 0 {
-						firstActiveModel = activeConfig.Models[0].Name
-					}
-					break
-				}
-				if firstActiveName != "" {
-					logger.Infof("Configured classifier provider '%s' for classifier '%s' is inactive. Automatically routing LLM classifier to active provider '%s' (model: '%s')", cl.LLM.Provider, cl.Name, firstActiveName, firstActiveModel)
-					cl.LLM.Provider = firstActiveName
-					cl.LLM.Model = firstActiveModel
-				} else {
-					return fmt.Errorf("configuration error: classifier provider '%s' is defined but has no API key / base_url configured", cl.LLM.Provider)
-				}
+				logger.Debugf("Classifier '%s' references provider '%s' which is currently inactive. It will be skipped at runtime unless its credentials become active.", cl.Name, cl.LLM.Provider)
 			}
-		}
-	}
-
-	// Auto-assign fallback provider if configured fallback provider is inactive
-	fbPName := strings.ToLower(strings.TrimSpace(c.DynamicRouting.FallbackProvider))
-	_, fbExists := c.Providers[fbPName]
-	if !fbExists {
-		var firstActiveName string
-		var firstActiveModel string
-		for activeName, activeConfig := range c.Providers {
-			firstActiveName = activeName
-			if len(activeConfig.Models) > 0 {
-				firstActiveModel = activeConfig.Models[0].Name
-			}
-			break
-		}
-		if firstActiveName != "" {
-			c.DynamicRouting.FallbackProvider = firstActiveName
-			c.DynamicRouting.FallbackModel = firstActiveModel
 		}
 	}
 
